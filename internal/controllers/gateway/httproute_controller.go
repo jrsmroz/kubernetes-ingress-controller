@@ -381,7 +381,7 @@ func (r *HTTPRouteReconciler) ensureGatewayReferenceStatusAdded(ctx context.Cont
 				Status:             metav1.ConditionTrue,
 				ObservedGeneration: httproute.Generation,
 				LastTransitionTime: metav1.Now(),
-				Reason:             string(gatewayv1alpha2.GatewayReasonReady),
+				Reason:             string(gatewayv1alpha2.RouteReasonAccepted),
 			}},
 		}
 

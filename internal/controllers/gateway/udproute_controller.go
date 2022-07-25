@@ -381,7 +381,7 @@ func (r *UDPRouteReconciler) ensureGatewayReferenceStatusAdded(ctx context.Conte
 				Status:             metav1.ConditionTrue,
 				ObservedGeneration: udproute.Generation,
 				LastTransitionTime: metav1.Now(),
-				Reason:             string(gatewayv1alpha2.GatewayReasonReady),
+				Reason:             string(gatewayv1alpha2.RouteReasonAccepted),
 			}},
 		}
 

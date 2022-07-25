@@ -23,7 +23,7 @@ var (
 	showDebug     = true
 	shouldCleanup = true
 
-	manifestRepo                  = "https://raw.githubusercontent.com/kubernetes-sigs/gateway-api/master/"
+	manifestRepo                  = "https://raw.githubusercontent.com/kubernetes-sigs/gateway-api/v0.5.0/"
 	conformanceTestsBaseManifests = fmt.Sprintf("%s/conformance/base/manifests.yaml", manifestRepo)
 )
 
