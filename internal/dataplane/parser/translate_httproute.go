@@ -185,6 +185,8 @@ func generateKongRoutesFromHTTPRouteRule(httproute *gatewayv1alpha2.HTTPRoute, r
 				r.Route.Headers = headers
 			}
 
+			r.StripPath = kong.Bool(false)
+
 			// add the route to the list of routes for the service(s)
 			routes = append(routes, r)
 		}
