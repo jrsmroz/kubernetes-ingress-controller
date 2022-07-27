@@ -125,6 +125,8 @@ func generateKongRoutesFromHTTPRouteRule(httproute *gatewayv1alpha2.HTTPRoute, r
 	// Therefore we treat each match rule as a separate Kong Route, so we iterate through
 	// all matches to determine all the routes that will be needed for the services.
 	var routes []kongstate.Route
+	// TODO: comment
+	plugins := generatePluginsFromHTTPRouteRuleFilters(rule)
 	if len(rule.Matches) > 0 {
 		for matchNumber, match := range rule.Matches {
 			// determine the name of the route, identify it as a route that belongs
@@ -185,7 +187,12 @@ func generateKongRoutesFromHTTPRouteRule(httproute *gatewayv1alpha2.HTTPRoute, r
 				r.Route.Headers = headers
 			}
 
+			// TODO: we need this to make the conformance tests passing. Do we want a command line
+			// parameter or something similar to customize this field?
 			r.StripPath = kong.Bool(false)
+
+			// attach the plugins to be applied to the given route
+			r.Plugins = plugins
 
 			// add the route to the list of routes for the service(s)
 			routes = append(routes, r)
@@ -212,8 +219,67 @@ func generateKongRoutesFromHTTPRouteRule(httproute *gatewayv1alpha2.HTTPRoute, r
 
 		// otherwise apply the hostnames to the route
 		r.Hosts = append(r.Hosts, hostnames...)
+		// apply all the plugins to the route
+		r.Plugins = plugins
 		routes = append(routes, r)
 	}
 
 	return routes, nil
+}
+
+// TODO: comment
+func generatePluginsFromHTTPRouteRuleFilters(rule gatewayv1alpha2.HTTPRouteRule) []kong.Plugin {
+	kongPlugins := make([]kong.Plugin, 0)
+	if rule.Filters == nil {
+		return kongPlugins
+	}
+	for _, filter := range rule.Filters {
+		if filter.Type == gatewayv1alpha2.HTTPRouteFilterRequestHeaderModifier {
+			kongPlugins = append(kongPlugins, generateRequestHeaderModifierKongPlugin(filter.RequestHeaderModifier))
+		}
+		// TODO: support all other filters
+	}
+
+	return kongPlugins
+}
+
+func generateRequestHeaderModifierKongPlugin(modifier *gatewayv1alpha2.HTTPRequestHeaderFilter) kong.Plugin {
+	plugin := kong.Plugin{
+		Name:   kong.String("request-transformer"),
+		Config: make(kong.Configuration),
+	}
+	if modifier.Set != nil {
+		setModifiers := make([]string, 0)
+		for _, s := range modifier.Set {
+			setModifiers = append(setModifiers, kongHeaderFormatter(s))
+		}
+		plugin.Config["replace"] = map[string][]string{
+			"headers": setModifiers,
+		}
+		plugin.Config["add"] = map[string][]string{
+			"headers": setModifiers,
+		}
+	}
+
+	if modifier.Add != nil {
+		appendModifiers := make([]string, 0)
+		for _, a := range modifier.Add {
+			appendModifiers = append(appendModifiers, kongHeaderFormatter(a))
+		}
+		plugin.Config["append"] = map[string][]string{
+			"headers": appendModifiers,
+		}
+	}
+
+	if modifier.Remove != nil {
+		plugin.Config["remove"] = map[string][]string{
+			"headers": modifier.Remove,
+		}
+	}
+
+	return plugin
+}
+
+func kongHeaderFormatter(header gatewayv1alpha2.HTTPHeader) string {
+	return fmt.Sprintf("%s:%s", header.Name, header.Value)
 }

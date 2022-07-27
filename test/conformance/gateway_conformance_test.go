@@ -93,6 +93,6 @@ var enabledGatewayConformanceTests = sets.NewString(
 	// "HTTPRouteMatching", //OK
 	// "HTTPRouteQueryParamMatching", //?
 	// "HTTPRouteReferenceGrant", //?
-	"HTTPRouteRequestHeaderModifier", //FAIL
+	"HTTPRouteRequestHeaderModifier", //OK
 	// "HTTPRouteSimpleSameNamespace", //OK
 )
