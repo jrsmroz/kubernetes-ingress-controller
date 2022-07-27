@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"reflect"
 
+	"github.com/kong/kubernetes-ingress-controller/v2/internal/util"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -93,6 +94,7 @@ func getSupportedGatewayForRoute(ctx context.Context, mgrc client.Client, obj cl
 			allowedNamespaces := make(map[string]interface{})
 			// set true if we find any AllowedRoutes. there may be none, in which case any namespace is permitted
 			filtered := false
+			matchingHostname := false
 			for _, listener := range gateway.Spec.Listeners {
 				// TODO https://github.com/Kong/kubernetes-ingress-controller/issues/2408
 				// This currently only performs a baseline filter to ensure that routes cannot match based on namespace
@@ -101,6 +103,8 @@ func getSupportedGatewayForRoute(ctx context.Context, mgrc client.Client, obj cl
 				// implementation with default allowed kinds when there's no user-specified filter.
 				switch obj.(type) {
 				case *gatewayv1alpha2.HTTPRoute:
+					hostnames := obj.(*gatewayv1alpha2.HTTPRoute).Spec.Hostnames
+					matchingHostname = matchHostname(listener, hostnames)
 					if !(listener.Protocol == gatewayv1alpha2.HTTPProtocolType || listener.Protocol == gatewayv1alpha2.HTTPSProtocolType) {
 						continue
 					}
@@ -113,6 +117,8 @@ func getSupportedGatewayForRoute(ctx context.Context, mgrc client.Client, obj cl
 						continue
 					}
 				case *gatewayv1alpha2.TLSRoute:
+					hostnames := obj.(*gatewayv1alpha2.TLSRoute).Spec.Hostnames
+					matchingHostname = matchHostname(listener, hostnames)
 					if listener.Protocol != gatewayv1alpha2.TLSProtocolType {
 						continue
 					}
@@ -147,7 +153,7 @@ func getSupportedGatewayForRoute(ctx context.Context, mgrc client.Client, obj cl
 			}
 
 			_, allowedNamespace := allowedNamespaces[obj.GetNamespace()]
-			if !filtered || allowedNamespace {
+			if (!filtered || allowedNamespace) && matchingHostname {
 				gateways = append(gateways, &gateway)
 			}
 		}
@@ -160,4 +166,18 @@ func getSupportedGatewayForRoute(ctx context.Context, mgrc client.Client, obj cl
 	}
 
 	return gateways, nil
+}
+
+func matchHostname(listener gatewayv1alpha2.Listener, hostnames []gatewayv1alpha2.Hostname) bool {
+	if listener.Hostname == nil || *listener.Hostname == "" || len(hostnames) == 0 {
+		return true
+	}
+
+	for _, hostname := range hostnames {
+		if util.Match(string(*listener.Hostname), string(hostname)) {
+			return true
+		}
+	}
+
+	return false
 }

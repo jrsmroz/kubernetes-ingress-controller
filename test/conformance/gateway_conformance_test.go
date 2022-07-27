@@ -82,7 +82,7 @@ var enabledGatewayConformanceTests = sets.NewString(
 	// "HTTPRouteDisallowedKind", //OK
 	// "HTTPExactPathMatching", //OK
 	// "HTTPRouteHeaderMatching", //OK
-	// "HTTPRouteHostnameIntersection", //FAIL
+	"HTTPRouteHostnameIntersection", //FAIL
 	// "HTTPRouteInvalidNonExistentBackendRef", //FAIL
 	// "HTTPRouteInvalidBackendRefUnknownKind", //FAIL
 	// "HTTPRouteInvalidCrossNamespaceBackendRef", //FAIL
@@ -93,6 +93,6 @@ var enabledGatewayConformanceTests = sets.NewString(
 	// "HTTPRouteMatching", //OK
 	// "HTTPRouteQueryParamMatching", //?
 	// "HTTPRouteReferenceGrant", //?
-	"HTTPRouteRequestHeaderModifier", //OK
+	// "HTTPRouteRequestHeaderModifier", //OK
 	// "HTTPRouteSimpleSameNamespace", //OK
 )
