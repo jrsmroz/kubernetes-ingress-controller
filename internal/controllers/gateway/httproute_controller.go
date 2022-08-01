@@ -10,6 +10,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/utils/pointer"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
@@ -299,25 +300,30 @@ func (r *HTTPRouteReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 	// requeue the object and wait until all supported gateways are ready.
 	debug(log, httproute, "checking if the httproute's gateways are ready")
 	for _, gateway := range gateways {
-		if !isGatewayReady(gateway) {
+		if !isGatewayReady(gateway.gateway) {
 			debug(log, httproute, "gateway for route was not ready, waiting")
 			return ctrl.Result{Requeue: true}, nil
 		}
 	}
 
-	// if the gateways are ready, and the HTTPRoute is destined for them, ensure that
-	// the object is pushed to the dataplane.
-	if err := r.DataplaneClient.UpdateObject(httproute); err != nil {
-		debug(log, httproute, "failed to update object in data-plane, requeueing")
-		return ctrl.Result{}, err
-	}
-	if r.DataplaneClient.AreKubernetesObjectReportsEnabled() {
-		// if the dataplane client has reporting enabled (this is the default and is
-		// tied in with status updates being enabled in the controller manager) then
-		// we will wait until the object is reported as successfully configured before
-		// moving on to status updates.
-		if !r.DataplaneClient.KubernetesObjectIsConfigured(httproute) {
-			return ctrl.Result{Requeue: true}, nil
+	if routeIsAccepted(gateways) {
+		// TODO: comment
+		filteredHTTPRoute := filterHostnames(gateways, httproute.DeepCopy())
+
+		// if the gateways are ready, and the HTTPRoute is destined for them, ensure that
+		// the object is pushed to the dataplane.
+		if err := r.DataplaneClient.UpdateObject(filteredHTTPRoute); err != nil {
+			debug(log, httproute, "failed to update object in data-plane, requeueing")
+			return ctrl.Result{}, err
+		}
+		if r.DataplaneClient.AreKubernetesObjectReportsEnabled() {
+			// if the dataplane client has reporting enabled (this is the default and is
+			// tied in with status updates being enabled in the controller manager) then
+			// we will wait until the object is reported as successfully configured before
+			// moving on to status updates.
+			if !r.DataplaneClient.KubernetesObjectIsConfigured(httproute) {
+				return ctrl.Result{Requeue: true}, nil
+			}
 		}
 	}
 
@@ -352,7 +358,7 @@ var httprouteParentKind = "Gateway"
 // ensureGatewayReferenceStatus takes any number of Gateways that should be
 // considered "attached" to a given HTTPRoute and ensures that the status
 // for the HTTPRoute is updated appropriately.
-func (r *HTTPRouteReconciler) ensureGatewayReferenceStatusAdded(ctx context.Context, httproute *gatewayv1alpha2.HTTPRoute, gateways ...*gatewayv1alpha2.Gateway) (bool, error) {
+func (r *HTTPRouteReconciler) ensureGatewayReferenceStatusAdded(ctx context.Context, httproute *gatewayv1alpha2.HTTPRoute, gateways ...supportedGatewayWithCondition) (bool, error) {
 	// map the existing parentStatues to avoid duplications
 	parentStatuses := make(map[string]*gatewayv1alpha2.RouteParentStatus)
 	for _, existingParent := range httproute.Status.Parents {
@@ -361,7 +367,11 @@ func (r *HTTPRouteReconciler) ensureGatewayReferenceStatusAdded(ctx context.Cont
 			namespace = string(*existingParent.ParentRef.Namespace)
 		}
 		existingParentCopy := existingParent
-		parentStatuses[namespace+string(existingParent.ParentRef.Name)] = &existingParentCopy
+		var sectionName string
+		if existingParent.ParentRef.SectionName != nil {
+			sectionName = string(*existingParent.ParentRef.SectionName)
+		}
+		parentStatuses[fmt.Sprintf("%s/%s/%s", namespace, existingParent.ParentRef.Name, sectionName)] = &existingParentCopy
 	}
 
 	// overlay the parent ref statuses for all new gateway references
@@ -370,24 +380,27 @@ func (r *HTTPRouteReconciler) ensureGatewayReferenceStatusAdded(ctx context.Cont
 		// build a new status for the parent Gateway
 		gatewayParentStatus := &gatewayv1alpha2.RouteParentStatus{
 			ParentRef: gatewayv1alpha2.ParentReference{
-				Group:     (*gatewayv1alpha2.Group)(&gatewayv1alpha2.GroupVersion.Group),
-				Kind:      (*gatewayv1alpha2.Kind)(&httprouteParentKind),
-				Namespace: (*gatewayv1alpha2.Namespace)(&gateway.Namespace),
-				Name:      gatewayv1alpha2.ObjectName(gateway.Name),
+				Group:       (*gatewayv1alpha2.Group)(&gatewayv1alpha2.GroupVersion.Group),
+				Kind:        (*gatewayv1alpha2.Kind)(&httprouteParentKind),
+				Namespace:   (*gatewayv1alpha2.Namespace)(&gateway.gateway.Namespace),
+				Name:        gatewayv1alpha2.ObjectName(gateway.gateway.Name),
+				SectionName: (*gatewayv1alpha2.SectionName)(pointer.StringPtr(gateway.listenerName)),
 			},
 			ControllerName: ControllerName,
 			Conditions: []metav1.Condition{{
-				Type:               string(gatewayv1alpha2.RouteConditionAccepted),
-				Status:             metav1.ConditionTrue,
+				Type:               gateway.condition.Type,
+				Status:             gateway.condition.Status,
 				ObservedGeneration: httproute.Generation,
 				LastTransitionTime: metav1.Now(),
-				Reason:             string(gatewayv1alpha2.RouteReasonAccepted),
+				Reason:             gateway.condition.Reason,
 			}},
 		}
 
+		key := fmt.Sprintf("%s/%s/%s", gateway.gateway.Namespace, gateway.gateway.Name, gateway.listenerName)
+
 		// if the reference already exists and doesn't require any changes
 		// then just leave it alone.
-		if existingGatewayParentStatus, exists := parentStatuses[gateway.Namespace+gateway.Name]; exists {
+		if existingGatewayParentStatus, exists := parentStatuses[key]; exists {
 			// fake the time of the existing status as this wont be equal
 			for i := range existingGatewayParentStatus.Conditions {
 				existingGatewayParentStatus.Conditions[i].LastTransitionTime = gatewayParentStatus.Conditions[0].LastTransitionTime
@@ -400,7 +413,7 @@ func (r *HTTPRouteReconciler) ensureGatewayReferenceStatusAdded(ctx context.Cont
 		}
 
 		// otherwise overlay the new status on top the list of parentStatuses
-		parentStatuses[gateway.Namespace+gateway.Name] = gatewayParentStatus
+		parentStatuses[key] = gatewayParentStatus
 		statusChangesWereMade = true
 	}
 

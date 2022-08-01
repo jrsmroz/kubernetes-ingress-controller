@@ -8,7 +8,7 @@ import (
 	"github.com/kong/kubernetes-ingress-controller/v2/internal/util"
 )
 
-func TestMatch(t *testing.T) {
+func TestIntersection(t *testing.T) {
 	for _, tt := range []struct {
 		name     string
 		pattern  string
@@ -95,7 +95,62 @@ func TestMatch(t *testing.T) {
 		},
 	} {
 		// Test that the functions behave in the same way even swapping the parameters
-		assert.Equal(t, tt.expected, util.HostnamesMatch(tt.pattern, tt.value), tt.name)
-		assert.Equal(t, tt.expected, util.HostnamesMatch(tt.value, tt.pattern), tt.name)
+		assert.Equal(t, tt.expected, util.HostnamesIntersect(tt.pattern, tt.value), tt.name)
+		assert.Equal(t, tt.expected, util.HostnamesIntersect(tt.value, tt.pattern), tt.name)
+	}
+}
+
+func TestMatch(t *testing.T) {
+	for _, tt := range []struct {
+		name     string
+		listener string
+		route    string
+		expected bool
+	}{
+		{
+			name:     "same hostname",
+			listener: "test.com",
+			route:    "test.com",
+			expected: true,
+		},
+		{
+			name:     "different hostname suffix",
+			listener: "test.com",
+			route:    "test.net",
+			expected: false,
+		},
+		{
+			name:     "different hostname lengths with only prefix matching",
+			listener: "foo.test.com",
+			route:    "foo.net",
+			expected: false,
+		},
+		{
+			name:     "valid wildcard for the listener",
+			listener: "*.test.com",
+			route:    "foo.test.com",
+			expected: true,
+		},
+		{
+			name:     "valid wildcard for the route",
+			listener: "foo.test.com",
+			route:    "*.test.com",
+			expected: false,
+		},
+		{
+			name:     "valid wildcard for many elements",
+			listener: "*.example.com",
+			route:    "so.many.names.example.com",
+			expected: true,
+		},
+		{
+			name:     "double matching wildcard",
+			listener: "*.example.com",
+			route:    "*.example.com",
+			expected: true,
+		},
+	} {
+		// Test that the functions behave in the same way even swapping the parameters
+		assert.Equal(t, tt.expected, util.HostnamesMatch(tt.listener, tt.route), tt.name)
 	}
 }
