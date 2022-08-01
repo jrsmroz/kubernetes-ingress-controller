@@ -101,10 +101,11 @@ func getSupportedGatewayForRoute(ctx context.Context, mgrc client.Client, obj cl
 				// criteria on a listener that cannot possibly handle them (e.g. an HTTPRoute should not be included
 				// based on matching a filter for a UDP listener). This needs to be expanded to an allowedRoutes.kind
 				// implementation with default allowed kinds when there's no user-specified filter.
+				var oneMatch bool
 				switch obj.(type) {
 				case *gatewayv1alpha2.HTTPRoute:
 					hostnames := obj.(*gatewayv1alpha2.HTTPRoute).Spec.Hostnames
-					matchingHostname = matchHostname(listener, hostnames)
+					oneMatch = matchHostname(listener, hostnames)
 					if !(listener.Protocol == gatewayv1alpha2.HTTPProtocolType || listener.Protocol == gatewayv1alpha2.HTTPSProtocolType) {
 						continue
 					}
@@ -118,12 +119,15 @@ func getSupportedGatewayForRoute(ctx context.Context, mgrc client.Client, obj cl
 					}
 				case *gatewayv1alpha2.TLSRoute:
 					hostnames := obj.(*gatewayv1alpha2.TLSRoute).Spec.Hostnames
-					matchingHostname = matchHostname(listener, hostnames)
+					oneMatch = matchHostname(listener, hostnames)
 					if listener.Protocol != gatewayv1alpha2.TLSProtocolType {
 						continue
 					}
 				default:
 					continue
+				}
+				if oneMatch {
+					matchingHostname = oneMatch
 				}
 				if listener.AllowedRoutes != nil {
 					filtered = true
@@ -174,7 +178,7 @@ func matchHostname(listener gatewayv1alpha2.Listener, hostnames []gatewayv1alpha
 	}
 
 	for _, hostname := range hostnames {
-		if util.Match(string(*listener.Hostname), string(hostname)) {
+		if util.HostnamesMatch(string(*listener.Hostname), string(hostname)) {
 			return true
 		}
 	}

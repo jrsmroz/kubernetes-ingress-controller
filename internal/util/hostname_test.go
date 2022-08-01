@@ -41,8 +41,8 @@ func TestMatch(t *testing.T) {
 		},
 		{
 			name:     "different hostname lengths with only prefix matching",
-			pattern:  "test.test.com",
-			value:    "test.test",
+			pattern:  "foo.test.com",
+			value:    "foo.net",
 			expected: false,
 		},
 		{
@@ -70,20 +70,32 @@ func TestMatch(t *testing.T) {
 			expected: true,
 		},
 		{
+			name:     "double not matching wildcard",
+			pattern:  "*.example.com",
+			value:    "*.example.net",
+			expected: false,
+		},
+		{
 			name:     "double matching wildcard with different sizes",
 			pattern:  "*.test.example.com",
 			value:    "*.example.com",
 			expected: true,
 		},
 		{
-			name:     "double not matching wildcard",
-			pattern:  "*.example.com",
+			name:     "double wildcard with different sizes and not matching suffix",
+			pattern:  "*.test.example.com",
+			value:    "*.test.net",
+			expected: false,
+		},
+		{
+			name:     "double wildcard with different sizes and not matching prefix",
+			pattern:  "*.test.example.com",
 			value:    "*.example.net",
 			expected: false,
 		},
 	} {
 		// Test that the functions behave in the same way even swapping the parameters
-		assert.Equal(t, tt.expected, util.Match(tt.pattern, tt.value), tt.name)
-		assert.Equal(t, tt.expected, util.Match(tt.value, tt.pattern), tt.name)
+		assert.Equal(t, tt.expected, util.HostnamesMatch(tt.pattern, tt.value), tt.name)
+		assert.Equal(t, tt.expected, util.HostnamesMatch(tt.value, tt.pattern), tt.name)
 	}
 }
