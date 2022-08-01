@@ -380,11 +380,10 @@ func (r *HTTPRouteReconciler) ensureGatewayReferenceStatusAdded(ctx context.Cont
 		// build a new status for the parent Gateway
 		gatewayParentStatus := &gatewayv1alpha2.RouteParentStatus{
 			ParentRef: gatewayv1alpha2.ParentReference{
-				Group:       (*gatewayv1alpha2.Group)(&gatewayv1alpha2.GroupVersion.Group),
-				Kind:        (*gatewayv1alpha2.Kind)(&httprouteParentKind),
-				Namespace:   (*gatewayv1alpha2.Namespace)(&gateway.gateway.Namespace),
-				Name:        gatewayv1alpha2.ObjectName(gateway.gateway.Name),
-				SectionName: (*gatewayv1alpha2.SectionName)(pointer.StringPtr(gateway.listenerName)),
+				Group:     (*gatewayv1alpha2.Group)(&gatewayv1alpha2.GroupVersion.Group),
+				Kind:      (*gatewayv1alpha2.Kind)(&httprouteParentKind),
+				Namespace: (*gatewayv1alpha2.Namespace)(&gateway.gateway.Namespace),
+				Name:      gatewayv1alpha2.ObjectName(gateway.gateway.Name),
 			},
 			ControllerName: ControllerName,
 			Conditions: []metav1.Condition{{
@@ -394,6 +393,9 @@ func (r *HTTPRouteReconciler) ensureGatewayReferenceStatusAdded(ctx context.Cont
 				LastTransitionTime: metav1.Now(),
 				Reason:             gateway.condition.Reason,
 			}},
+		}
+		if gateway.listenerName != "" {
+			gatewayParentStatus.ParentRef.SectionName = (*gatewayv1alpha2.SectionName)(pointer.StringPtr(gateway.listenerName))
 		}
 
 		key := fmt.Sprintf("%s/%s/%s", gateway.gateway.Namespace, gateway.gateway.Name, gateway.listenerName)

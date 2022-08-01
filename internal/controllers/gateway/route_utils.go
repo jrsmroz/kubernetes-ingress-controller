@@ -214,23 +214,35 @@ func listenerHostnameIntersectWithRouteHostnames(listener gatewayv1alpha2.Listen
 func filterHostnames(gateways []supportedGatewayWithCondition, httpRoute *gatewayv1alpha2.HTTPRoute) *gatewayv1alpha2.HTTPRoute {
 	filteredHostnames := make([]gatewayv1alpha2.Hostname, 0)
 
-	for _, hostname := range httpRoute.Spec.Hostnames {
-	gatewayLoop:
+	if len(httpRoute.Spec.Hostnames) == 0 {
 		for _, gateway := range gateways {
 			for _, listener := range gateway.gateway.Spec.Listeners {
-				if listener.Hostname != nil && *listener.Hostname != "" {
-					if util.HostnamesMatch(string(*listener.Hostname), string(hostname)) {
-						filteredHostnames = append(filteredHostnames, hostname)
-						break gatewayLoop
-					}
-					if util.HostnamesMatch(string(hostname), string(*listener.Hostname)) {
-						filteredHostnames = append(filteredHostnames, *listener.Hostname)
-						break gatewayLoop
+				if gatewayv1alpha2.SectionName(gateway.listenerName) == "" ||
+					gatewayv1alpha2.SectionName(gateway.listenerName) == listener.Name {
+					filteredHostnames = append(filteredHostnames, *listener.Hostname)
+				}
+			}
+		}
+	} else {
+		for _, hostname := range httpRoute.Spec.Hostnames {
+		gatewayLoop:
+			for _, gateway := range gateways {
+				for _, listener := range gateway.gateway.Spec.Listeners {
+					if listener.Hostname != nil && *listener.Hostname != "" {
+						if util.HostnamesMatch(string(*listener.Hostname), string(hostname)) {
+							filteredHostnames = append(filteredHostnames, hostname)
+							break gatewayLoop
+						}
+						if util.HostnamesMatch(string(hostname), string(*listener.Hostname)) {
+							filteredHostnames = append(filteredHostnames, *listener.Hostname)
+							break gatewayLoop
+						}
 					}
 				}
 			}
 		}
 	}
+
 	httpRoute.Spec.Hostnames = filteredHostnames
 	return httpRoute
 }
