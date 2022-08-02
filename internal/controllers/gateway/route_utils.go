@@ -214,6 +214,8 @@ func listenerHostnameIntersectWithRouteHostnames(listener gatewayv1alpha2.Listen
 func filterHostnames(gateways []supportedGatewayWithCondition, httpRoute *gatewayv1alpha2.HTTPRoute) *gatewayv1alpha2.HTTPRoute {
 	filteredHostnames := make([]gatewayv1alpha2.Hostname, 0)
 
+	// if no hostnames are specified in the route spec, get all the hostnames from
+	// the gateway
 	if len(httpRoute.Spec.Hostnames) == 0 {
 		for _, gateway := range gateways {
 			for _, listener := range gateway.gateway.Spec.Listeners {
@@ -228,7 +230,15 @@ func filterHostnames(gateways []supportedGatewayWithCondition, httpRoute *gatewa
 		gatewayLoop:
 			for _, gateway := range gateways {
 				for _, listener := range gateway.gateway.Spec.Listeners {
-					if listener.Hostname != nil && *listener.Hostname != "" {
+					// if the listenerName is specified and matches the name of the gateway listener proceed
+					if gatewayv1alpha2.SectionName(gateway.listenerName) == "" ||
+						gatewayv1alpha2.SectionName(gateway.listenerName) == listener.Name {
+
+						if listener.Hostname == nil || *listener.Hostname == "" {
+							filteredHostnames = append(filteredHostnames, hostname)
+							break
+						}
+
 						if util.HostnamesMatch(string(*listener.Hostname), string(hostname)) {
 							filteredHostnames = append(filteredHostnames, hostname)
 							break gatewayLoop
@@ -238,6 +248,7 @@ func filterHostnames(gateways []supportedGatewayWithCondition, httpRoute *gatewa
 							break gatewayLoop
 						}
 					}
+
 				}
 			}
 		}

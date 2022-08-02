@@ -89,7 +89,7 @@ var enabledGatewayConformanceTests = sets.NewString(
 	// "HTTPRouteInvalidCrossNamespaceParentRef", - 2nd iteration
 	// "HTTPRouteInvalidReferenceGrant", - 2nd iteration
 	"HTTPRouteListenerHostnameMatching", // OK
-	// "HTTPRouteMatchingAcrossRoutes", // REGRESSION
+	"HTTPRouteMatchingAcrossRoutes",     // OK
 	// "HTTPRouteMatching", //OK
 	// "HTTPRouteQueryParamMatching", // ? - 2nd iteration
 	// "HTTPRouteReferenceGrant", // ? - 2nd iteration
