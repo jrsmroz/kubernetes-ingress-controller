@@ -259,11 +259,38 @@ func filterHostnames(gateways []supportedGatewayWithCondition, httpRoute *gatewa
 	return httpRoute
 }
 
-func routeIsAccepted(gateways []supportedGatewayWithCondition) bool {
+func isRouteAccepted(gateways []supportedGatewayWithCondition) bool {
 	for _, gateway := range gateways {
 		if gateway.condition.Type == string(v1alpha2.RouteConditionAccepted) && gateway.condition.Status == metav1.ConditionTrue {
 			return true
 		}
 	}
+	return false
+}
+
+func isHTTPReferenceGranted(froms []gatewayv1alpha2.ReferenceGrantFrom, tos []gatewayv1alpha2.ReferenceGrantTo, backendRef gatewayv1alpha2.HTTPBackendRef, fromNamespace string) bool {
+	var backendRefGroup gatewayv1alpha2.Group
+	var backendRefKind gatewayv1alpha2.Kind
+
+	if backendRef.Group != nil {
+		backendRefGroup = *backendRef.Group
+	}
+	if backendRef.Kind != nil {
+		backendRefKind = *backendRef.Kind
+	}
+	for _, from := range froms {
+		if from.Group != gatewayv1alpha2.GroupName || from.Kind != "HTTPRoute" || fromNamespace != string(from.Namespace) {
+			continue
+		}
+
+		for _, to := range tos {
+			if backendRefGroup == to.Group &&
+				backendRefKind == to.Kind &&
+				(to.Name == nil || *to.Name == backendRef.Name) {
+				return true
+			}
+		}
+	}
+
 	return false
 }

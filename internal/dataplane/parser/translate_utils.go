@@ -131,7 +131,8 @@ func (p *Parser) generateKongServiceFromBackendRef(
 	}, grants)
 
 	for _, backendRef := range backendRefs {
-		if isRefAllowedByGrant(backendRef.Namespace, backendRef.Name, backendRef.Group, backendRef.Kind, allowed) {
+		if util.IsBackendRefGroupKindSupported(backendRef.Group, backendRef.Kind) &&
+			isRefAllowedByGrant(backendRef.Namespace, backendRef.Name, backendRef.Group, backendRef.Kind, allowed) {
 			backend := kongstate.ServiceBackend{
 				Name: string(backendRef.Name),
 				PortDef: kongstate.PortDef{
@@ -149,8 +150,12 @@ func (p *Parser) generateKongServiceFromBackendRef(
 			// these, we do not want a single impermissible ref to take the entire rule offline. in the case of edits,
 			// failing the entire rule could potentially delete routes that were previously online and in use, and
 			// that remain viable (because they still have some permissible backendRefs)
-			p.logger.Errorf("%s requested backendRef to %s %s/%s, but no ReferenceGrant permits it, skipping...",
-				objName, *backendRef.Kind, *backendRef.Namespace, backendRef.Name)
+			namespace := route.GetNamespace()
+			if backendRef.Namespace != nil {
+				namespace = string(*backendRef.Namespace)
+			}
+			p.logger.Errorf("%s requested backendRef to %s %s/%s, but no ReferencePolicy permits it, skipping...",
+				objName, *backendRef.Kind, namespace, backendRef.Name)
 		}
 	}
 

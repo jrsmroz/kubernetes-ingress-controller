@@ -78,20 +78,20 @@ func TestGatewayConformance(t *testing.T) {
 }
 
 var enabledGatewayConformanceTests = sets.NewString(
-	"HTTPRouteCrossNamespace",               //OK
-	"HTTPRouteDisallowedKind",               //OK
-	"HTTPExactPathMatching",                 //OK
-	"HTTPRouteHeaderMatching",               //OK
-	"HTTPRouteHostnameIntersection",         //OK
-	"HTTPRouteInvalidNonExistentBackendRef", //OK
-	// "HTTPRouteInvalidBackendRefUnknownKind", //FAIL
-	// "HTTPRouteInvalidCrossNamespaceBackendRef", //FAIL
+	"HTTPRouteCrossNamespace",                  //OK
+	"HTTPRouteDisallowedKind",                  //OK
+	"HTTPExactPathMatching",                    //OK
+	"HTTPRouteHeaderMatching",                  //OK
+	"HTTPRouteHostnameIntersection",            //OK
+	"HTTPRouteInvalidNonExistentBackendRef",    //OK
+	"HTTPRouteInvalidBackendRefUnknownKind",    //OK
+	"HTTPRouteInvalidCrossNamespaceBackendRef", //OK
 	// "HTTPRouteInvalidCrossNamespaceParentRef", // FAIL
 	// "HTTPRouteInvalidReferenceGrant", // FAIL
 	"HTTPRouteListenerHostnameMatching", // OK
 	"HTTPRouteMatchingAcrossRoutes",     // OK
 	"HTTPRouteMatching",                 //OK
-	// "HTTPRouteQueryParamMatching", // FAIL
+	"HTTPRouteQueryParamMatching",       // FAIL
 	// "HTTPRouteReferenceGrant", // FAIL
 	"HTTPRouteRequestHeaderModifier", //OK
 	"HTTPRouteSimpleSameNamespace",   //OK

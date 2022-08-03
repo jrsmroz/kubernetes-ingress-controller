@@ -24,6 +24,7 @@ import (
 	gatewayv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
 
 	"github.com/kong/kubernetes-ingress-controller/v2/internal/dataplane"
+	"github.com/kong/kubernetes-ingress-controller/v2/internal/util"
 )
 
 // -----------------------------------------------------------------------------
@@ -308,7 +309,7 @@ func (r *HTTPRouteReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 		}
 	}
 
-	if routeIsAccepted(gateways) {
+	if isRouteAccepted(gateways) {
 		// TODO: comment
 		filteredHTTPRoute := filterHostnames(gateways, httproute.DeepCopy())
 
@@ -475,41 +476,69 @@ func (r *HTTPRouteReconciler) ensureGatewayReferenceStatusRemoved(ctx context.Co
 }
 
 // TODO: comment
-func (r *HTTPRouteReconciler) setRouteConditionResolvedRefsCondition(ctx context.Context, httproute *gatewayv1alpha2.HTTPRoute, parentstatuses map[string]*gatewayv1alpha2.RouteParentStatus) (map[string]*gatewayv1alpha2.RouteParentStatus, error) {
-	var backendsFound bool
+func (r *HTTPRouteReconciler) setRouteConditionResolvedRefsCondition(ctx context.Context, httpRoute *gatewayv1alpha2.HTTPRoute, parentStatuses map[string]*gatewayv1alpha2.RouteParentStatus) (map[string]*gatewayv1alpha2.RouteParentStatus, error) {
+	var reason gatewayv1alpha2.RouteConditionReason
 
 	// v1alpha2.RouteConditionResolvedRefs condition
 outerLoop:
-	for _, rule := range httproute.Spec.Rules {
-		service := &corev1.Service{}
+	for _, rule := range httpRoute.Spec.Rules {
 		for _, backendRef := range rule.BackendRefs {
-			namespace := httproute.Namespace
+			backendNamespace := httpRoute.Namespace
 			if backendRef.Namespace != nil && *backendRef.Namespace != "" {
-				namespace = string(*backendRef.Namespace)
+				backendNamespace = string(*backendRef.Namespace)
 			}
-			err := r.Client.Get(ctx, types.NamespacedName{Namespace: namespace, Name: string(backendRef.Name)}, service)
-			if err == nil {
-				backendsFound = true
+
+			// Check if the BackendRef GroupKind is supported
+			if !util.IsBackendRefGroupKindSupported(backendRef.Group, backendRef.Kind) {
+				reason = v1alpha2.RouteReasonInvalidKind
 				break outerLoop
 			}
-			if !k8serrors.IsNotFound(err) {
-				return nil, err
+
+			// Check if all the objects referenced actually exist
+			// Only services are currently supported as BackendRef objects
+			service := &corev1.Service{}
+			err := r.Client.Get(ctx, types.NamespacedName{Namespace: backendNamespace, Name: string(backendRef.Name)}, service)
+			if err != nil {
+				if !k8serrors.IsNotFound(err) {
+					return nil, err
+				}
+				reason = v1alpha2.RouteReasonBackendNotFound
+				break outerLoop
+			}
+
+			// Check if the object referenced is in another namespace,
+			// and if there is grant for that reference
+			if httpRoute.Namespace != backendNamespace {
+				referenceGrantList := &gatewayv1alpha2.ReferenceGrantList{}
+				if err := r.Client.List(ctx, referenceGrantList, client.InNamespace(backendNamespace)); err != nil {
+					return nil, err
+				}
+				if len(referenceGrantList.Items) == 0 {
+					reason = gatewayv1alpha2.RouteReasonRefNotPermitted
+					break outerLoop
+				}
+				for _, grant := range referenceGrantList.Items {
+					if !isHTTPReferenceGranted(grant.Spec.From, grant.Spec.To, backendRef, httpRoute.Namespace) {
+						reason = gatewayv1alpha2.RouteReasonRefNotPermitted
+						break outerLoop
+					}
+				}
 			}
 		}
 	}
-	if backendsFound {
-		return parentstatuses, nil
+	if reason == "" {
+		return parentStatuses, nil
 	}
 
-	for _, parentStatus := range parentstatuses {
+	for _, parentStatus := range parentStatuses {
 		parentStatus.Conditions = append(parentStatus.Conditions, metav1.Condition{
 			Type:               string(v1alpha2.RouteConditionResolvedRefs),
 			Status:             metav1.ConditionFalse,
-			ObservedGeneration: httproute.Generation,
+			ObservedGeneration: httpRoute.Generation,
 			LastTransitionTime: metav1.Now(),
-			Reason:             string(v1alpha2.RouteReasonBackendNotFound),
+			Reason:             string(reason),
 		})
 	}
 
-	return parentstatuses, nil
+	return parentStatuses, nil
 }
