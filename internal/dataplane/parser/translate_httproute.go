@@ -47,7 +47,7 @@ func (p *Parser) ingressRulesFromHTTPRoutes() ingressRules {
 }
 
 func (p *Parser) ingressRulesFromHTTPRoute(result *ingressRules, httproute *gatewayv1alpha2.HTTPRoute) error {
-	// first we grab the spec and gather some metdata about the object
+	// first we grab the spec and gather some metadata about the object
 	spec := httproute.Spec
 
 	// validation for HTTPRoutes will happen at a higher layer, but in spite of that we run

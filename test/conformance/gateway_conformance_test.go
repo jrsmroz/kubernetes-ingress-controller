@@ -78,21 +78,21 @@ func TestGatewayConformance(t *testing.T) {
 }
 
 var enabledGatewayConformanceTests = sets.NewString(
-	// "HTTPRouteCrossNamespace",       //OK
-	// "HTTPRouteDisallowedKind",       //OK
-	// "HTTPExactPathMatching",         //OK
-	// "HTTPRouteHeaderMatching",       //OK
-	"HTTPRouteHostnameIntersection", //OK
-	// "HTTPRouteInvalidNonExistentBackendRef", //FAIL - 2nd iteration
-	// "HTTPRouteInvalidBackendRefUnknownKind", //FAIL - 2nd iteration
-	// "HTTPRouteInvalidCrossNamespaceBackendRef", //FAIL - 2nd iteration
-	// "HTTPRouteInvalidCrossNamespaceParentRef", - 2nd iteration
-	// "HTTPRouteInvalidReferenceGrant", - 2nd iteration
+	"HTTPRouteCrossNamespace",               //OK
+	"HTTPRouteDisallowedKind",               //OK
+	"HTTPExactPathMatching",                 //OK
+	"HTTPRouteHeaderMatching",               //OK
+	"HTTPRouteHostnameIntersection",         //OK
+	"HTTPRouteInvalidNonExistentBackendRef", //OK
+	// "HTTPRouteInvalidBackendRefUnknownKind", //FAIL
+	// "HTTPRouteInvalidCrossNamespaceBackendRef", //FAIL
+	// "HTTPRouteInvalidCrossNamespaceParentRef", // FAIL
+	// "HTTPRouteInvalidReferenceGrant", // FAIL
 	"HTTPRouteListenerHostnameMatching", // OK
 	"HTTPRouteMatchingAcrossRoutes",     // OK
-	// "HTTPRouteMatching", //OK
-	// "HTTPRouteQueryParamMatching", // ? - 2nd iteration
-	// "HTTPRouteReferenceGrant", // ? - 2nd iteration
-	// "HTTPRouteRequestHeaderModifier", //OK
-	// "HTTPRouteSimpleSameNamespace",   //OK
+	"HTTPRouteMatching",                 //OK
+	// "HTTPRouteQueryParamMatching", // FAIL
+	// "HTTPRouteReferenceGrant", // FAIL
+	"HTTPRouteRequestHeaderModifier", //OK
+	"HTTPRouteSimpleSameNamespace",   //OK
 )

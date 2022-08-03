@@ -154,12 +154,6 @@ func (p *Parser) generateKongServiceFromBackendRef(
 		}
 	}
 
-	// however, if there are _no_ permissible backendRefs, the route will not be able to forward any traffic and we
-	// should reject it
-	if len(backends) == 0 {
-		return kongstate.Service{}, fmt.Errorf("%s has no permissible backendRefs, cannot create a Kong service for it", objName)
-	}
-
 	// the service name needs to uniquely identify this service given it's list of
 	// one or more backends.
 	serviceName := fmt.Sprintf("%s.%d", getUniqueKongServiceNameForObject(route), ruleNumber)
@@ -185,6 +179,19 @@ func (p *Parser) generateKongServiceFromBackendRef(
 			Backends:  backends,
 			Parent:    route,
 		}
+	}
+
+	if len(service.Backends) == 0 {
+		if service.Plugins == nil {
+			service.Plugins = make([]kong.Plugin, 0)
+		}
+		service.Plugins = append(service.Plugins, kong.Plugin{
+			Name: kong.String("request-termination"),
+			Config: kong.Configuration{
+				"status_code": 500,
+				"message":     "no existing backendRef provided",
+			},
+		})
 	}
 
 	return service, nil

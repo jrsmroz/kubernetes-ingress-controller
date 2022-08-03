@@ -221,7 +221,9 @@ func filterHostnames(gateways []supportedGatewayWithCondition, httpRoute *gatewa
 			for _, listener := range gateway.gateway.Spec.Listeners {
 				if gatewayv1alpha2.SectionName(gateway.listenerName) == "" ||
 					gatewayv1alpha2.SectionName(gateway.listenerName) == listener.Name {
-					filteredHostnames = append(filteredHostnames, *listener.Hostname)
+					if listener.Hostname != nil {
+						filteredHostnames = append(filteredHostnames, *listener.Hostname)
+					}
 				}
 			}
 		}
@@ -248,7 +250,6 @@ func filterHostnames(gateways []supportedGatewayWithCondition, httpRoute *gatewa
 							break gatewayLoop
 						}
 					}
-
 				}
 			}
 		}

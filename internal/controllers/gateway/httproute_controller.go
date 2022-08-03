@@ -6,7 +6,8 @@ import (
 	"reflect"
 
 	"github.com/go-logr/logr"
-	"k8s.io/apimachinery/pkg/api/errors"
+	corev1 "k8s.io/api/core/v1"
+	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
@@ -19,6 +20,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 	"sigs.k8s.io/controller-runtime/pkg/source"
+	"sigs.k8s.io/gateway-api/apis/v1alpha2"
 	gatewayv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
 
 	"github.com/kong/kubernetes-ingress-controller/v2/internal/dataplane"
@@ -236,7 +238,7 @@ func (r *HTTPRouteReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 	if err := r.Get(ctx, req.NamespacedName, httproute); err != nil {
 		// if the queued object is no longer present in the proxy cache we need
 		// to ensure that if it was ever added to the cache, it gets removed.
-		if errors.IsNotFound(err) {
+		if k8serrors.IsNotFound(err) {
 			debug(log, httproute, "object does not exist, ensuring it is not present in the proxy cache")
 			httproute.Namespace = req.Namespace
 			httproute.Name = req.Name
@@ -424,6 +426,11 @@ func (r *HTTPRouteReconciler) ensureGatewayReferenceStatusAdded(ctx context.Cont
 		return false, nil
 	}
 
+	parentStatuses, err := r.setRouteConditionResolvedRefsCondition(ctx, httproute, parentStatuses)
+	if err != nil {
+		return false, err
+	}
+
 	// update the httproute status with the new status references
 	httproute.Status.Parents = make([]gatewayv1alpha2.RouteParentStatus, 0, len(parentStatuses))
 	for _, parent := range parentStatuses {
@@ -465,4 +472,44 @@ func (r *HTTPRouteReconciler) ensureGatewayReferenceStatusRemoved(ctx context.Co
 
 	// the status needed an update and it was updated successfully
 	return true, nil
+}
+
+// TODO: comment
+func (r *HTTPRouteReconciler) setRouteConditionResolvedRefsCondition(ctx context.Context, httproute *gatewayv1alpha2.HTTPRoute, parentstatuses map[string]*gatewayv1alpha2.RouteParentStatus) (map[string]*gatewayv1alpha2.RouteParentStatus, error) {
+	var backendsFound bool
+
+	// v1alpha2.RouteConditionResolvedRefs condition
+outerLoop:
+	for _, rule := range httproute.Spec.Rules {
+		service := &corev1.Service{}
+		for _, backendRef := range rule.BackendRefs {
+			namespace := httproute.Namespace
+			if backendRef.Namespace != nil && *backendRef.Namespace != "" {
+				namespace = string(*backendRef.Namespace)
+			}
+			err := r.Client.Get(ctx, types.NamespacedName{Namespace: namespace, Name: string(backendRef.Name)}, service)
+			if err == nil {
+				backendsFound = true
+				break outerLoop
+			}
+			if !k8serrors.IsNotFound(err) {
+				return nil, err
+			}
+		}
+	}
+	if backendsFound {
+		return parentstatuses, nil
+	}
+
+	for _, parentStatus := range parentstatuses {
+		parentStatus.Conditions = append(parentStatus.Conditions, metav1.Condition{
+			Type:               string(v1alpha2.RouteConditionResolvedRefs),
+			Status:             metav1.ConditionFalse,
+			ObservedGeneration: httproute.Generation,
+			LastTransitionTime: metav1.Now(),
+			Reason:             string(v1alpha2.RouteReasonBackendNotFound),
+		})
+	}
+
+	return parentstatuses, nil
 }
