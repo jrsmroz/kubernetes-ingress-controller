@@ -80,6 +80,13 @@ func (r *HTTPRouteReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		return err
 	}
 
+	if err := c.Watch(
+		&source.Kind{Type: &gatewayv1alpha2.ReferenceGrant{}},
+		handler.EnqueueRequestsFromMapFunc(r.listHTTPRoutesForGateway),
+	); err != nil {
+		return err
+	}
+
 	// because of the additional burden of having to manage reference data-plane
 	// configurations for HTTPRoute objects in the underlying Kong Gateway, we
 	// simply reconcile ALL HTTPRoute objects. This allows us to drop the backend
@@ -221,6 +228,24 @@ func (r *HTTPRouteReconciler) listHTTPRoutesForGateway(obj client.Object) []reco
 	}
 
 	return queue
+}
+
+func (r *HTTPRouteReconciler) listReferenceGrantsForHTTPRoute(obj client.Object) []reconcile.Request {
+	// map all HTTPRoute objects
+	httprouteList := gatewayv1alpha2.HTTPRouteList{}
+	if err := r.Client.List(context.Background(), &httprouteList); err != nil {
+		r.Log.Error(err, "failed to list httproute objects from the cached client")
+		return nil
+	}
+
+	return []reconcile.Request{
+		{
+			NamespacedName: types.NamespacedName{
+				Namespace: httprouteList.Items[0].Namespace,
+				Name:      httprouteList.Items[0].Name,
+			},
+		},
+	}
 }
 
 // -----------------------------------------------------------------------------
@@ -422,6 +447,7 @@ func (r *HTTPRouteReconciler) ensureGatewayReferenceStatusAdded(ctx context.Cont
 		statusChangesWereMade = true
 	}
 
+	/// TODO: move this condition BELOW
 	// if we didn't have to actually make any changes, no status update is needed
 	if !statusChangesWereMade {
 		return false, nil

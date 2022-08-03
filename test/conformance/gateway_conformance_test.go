@@ -78,21 +78,21 @@ func TestGatewayConformance(t *testing.T) {
 }
 
 var enabledGatewayConformanceTests = sets.NewString(
-	"HTTPRouteCrossNamespace",                  //OK
-	"HTTPRouteDisallowedKind",                  //OK
-	"HTTPExactPathMatching",                    //OK
-	"HTTPRouteHeaderMatching",                  //OK
-	"HTTPRouteHostnameIntersection",            //OK
-	"HTTPRouteInvalidNonExistentBackendRef",    //OK
-	"HTTPRouteInvalidBackendRefUnknownKind",    //OK
-	"HTTPRouteInvalidCrossNamespaceBackendRef", //OK
+	// "HTTPRouteCrossNamespace",                  //OK
+	// "HTTPRouteDisallowedKind",                  //OK
+	// "HTTPExactPathMatching",                    //OK
+	// "HTTPRouteHeaderMatching",                  //OK
+	// "HTTPRouteHostnameIntersection",            //OK
+	// "HTTPRouteInvalidNonExistentBackendRef",    //OK
+	// "HTTPRouteInvalidBackendRefUnknownKind",    //OK
+	// "HTTPRouteInvalidCrossNamespaceBackendRef", //OK
 	// "HTTPRouteInvalidCrossNamespaceParentRef", // FAIL
 	// "HTTPRouteInvalidReferenceGrant", // FAIL
-	"HTTPRouteListenerHostnameMatching", // OK
-	"HTTPRouteMatchingAcrossRoutes",     // OK
-	"HTTPRouteMatching",                 //OK
-	"HTTPRouteQueryParamMatching",       // FAIL
-	// "HTTPRouteReferenceGrant", // FAIL
-	"HTTPRouteRequestHeaderModifier", //OK
-	"HTTPRouteSimpleSameNamespace",   //OK
+	// "HTTPRouteListenerHostnameMatching", // OK
+	// "HTTPRouteMatchingAcrossRoutes",     // OK
+	// "HTTPRouteMatching",                 //OK
+	// "HTTPRouteQueryParamMatching",       //? (additioonal feature)
+	"HTTPRouteReferenceGrant", // FAIL Kong returns 500 instead of 200 (additioonal feature)
+	// "HTTPRouteRequestHeaderModifier", //OK
+	// "HTTPRouteSimpleSameNamespace",   //OK
 )
