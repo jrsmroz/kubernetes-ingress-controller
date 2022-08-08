@@ -490,6 +490,18 @@ func getReferenceGrantConditionReason(gatewayNamespace string, certRef gatewayv1
 	return string(gatewayv1alpha2.ListenerReasonInvalidCertificateRef)
 }
 
+func getResolvedRefCondition(listener gatewayv1alpha2.ListenerStatus) metav1.Condition {
+	var cond metav1.Condition
+	for _, condition := range listener.Conditions {
+		if condition.Type == string(gatewayv1alpha2.ListenerConditionResolvedRefs) {
+			if condition.LastTransitionTime.After(cond.LastTransitionTime.Time) {
+				cond = condition
+			}
+		}
+	}
+	return cond
+}
+
 // -----------------------------------------------------------------------------
 // Gateway Utils - Watch Predicate Helpers
 // -----------------------------------------------------------------------------

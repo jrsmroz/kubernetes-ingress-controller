@@ -105,6 +105,15 @@ func (r *GatewayReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		return err
 	}
 
+	// TODO:comment
+	if err := c.Watch(
+		&source.Kind{Type: &gatewayv1alpha2.ReferenceGrant{}},
+		handler.EnqueueRequestsFromMapFunc(r.listGatewaysForServiceGrant),
+		predicate.NewPredicateFuncs(r.isReferenceGrantForGatewaySecret),
+	); err != nil {
+		return err
+	}
+
 	// start the required gatewayclass controller as well
 	gwcCTRL := &GatewayClassReconciler{
 		Client: r.Client,
@@ -190,6 +199,95 @@ func (r *GatewayReconciler) listGatewaysForService(svc client.Object) (recs []re
 // the gateway service referenced by --publish-service.
 func (r *GatewayReconciler) isGatewayService(obj client.Object) bool {
 	return fmt.Sprintf("%s/%s", obj.GetNamespace(), obj.GetName()) == r.PublishService
+}
+
+// TODO: comment
+func (r *GatewayReconciler) listGatewaysForServiceGrant(obj client.Object) (recs []reconcile.Request) {
+	_, ok := obj.(*gatewayv1alpha2.ReferenceGrant)
+	if !ok {
+		r.Log.Error(fmt.Errorf("unexpected object type in referencegrant watch predicates"), "expected", "*gatewayv1alpha2.ReferenceGrant", "found", reflect.TypeOf(obj))
+		return
+	}
+
+	gateways := &gatewayv1alpha2.GatewayList{}
+	if err := r.Client.List(context.Background(), gateways); err != nil {
+		r.Log.Error(err, "failed to list gateways for referencegrant in watch predicates", obj)
+		return
+	}
+	grants := gatewayv1alpha2.ReferenceGrantList{}
+	if err := r.Client.List(context.Background(), &grants); err != nil {
+		r.Log.Error(err, "failed to list grants in watch predicates", obj)
+		return
+	}
+
+	gatewayListenerStatusChanging := make(map[string]gatewayv1alpha2.Gateway)
+	for _, gateway := range gateways.Items {
+		for _, listener := range gateway.Spec.Listeners {
+			if listener.TLS == nil {
+				continue
+			}
+			// get the resolvedRef condition
+			var resolvedRefCondition metav1.Condition
+			for _, listenerStatus := range gateway.Status.Listeners {
+				if listener.Name == listenerStatus.Name {
+					resolvedRefCondition = getResolvedRefCondition(listenerStatus)
+					break
+				}
+			}
+			// iterate over all the certificateRequest and check if the reason would will be changed (or added)
+			for _, certRef := range listener.TLS.CertificateRefs {
+				resolvedRefNewReason := getReferenceGrantConditionReason(gateway.Namespace, certRef, grants.Items)
+				if resolvedRefNewReason != resolvedRefCondition.Reason {
+					gatewayListenerStatusChanging[fmt.Sprintf("%s/%s", gateway.Namespace, gateway.Name)] = gateway
+					break
+				}
+			}
+			// the gateway is already queued, we don't need to check furthermore
+			if _, ok := gatewayListenerStatusChanging[fmt.Sprintf("%s/%s", gateway.Namespace, gateway.Name)]; ok {
+				break
+			}
+		}
+	}
+	for _, gateway := range gatewayListenerStatusChanging {
+		recs = append(recs, reconcile.Request{
+			NamespacedName: types.NamespacedName{
+				Namespace: gateway.Namespace,
+				Name:      gateway.Name,
+			},
+		})
+	}
+	if len(recs) != 0 {
+		return recs
+	}
+	return
+}
+
+// TODO: comment
+func (r *GatewayReconciler) isReferenceGrantForGatewaySecret(obj client.Object) bool {
+	grant, ok := obj.(*gatewayv1alpha2.ReferenceGrant)
+	if !ok {
+		r.Log.Error(fmt.Errorf("unexpected object type in referencegrant watch predicates"), "expected", "*gatewayv1alpha2.ReferenceGrant", "found", reflect.TypeOf(obj))
+		return false
+	}
+
+	var found bool
+	for _, from := range grant.Spec.From {
+		if from.Group == gatewayV1alpha2Group && from.Kind == "Gateway" {
+			found = true
+			break
+		}
+	}
+	if !found {
+		return false
+	}
+
+	for _, to := range grant.Spec.To {
+		if (to.Group == "" || to.Group != "core") && to.Kind == "Secret" {
+			found = true
+			break
+		}
+	}
+	return found
 }
 
 // -----------------------------------------------------------------------------
