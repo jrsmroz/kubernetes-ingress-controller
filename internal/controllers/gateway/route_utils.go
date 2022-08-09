@@ -234,7 +234,7 @@ func filterHostnames(gateways []supportedGatewayWithCondition, httpRoute *gatewa
 		}
 	} else {
 		for _, hostname := range httpRoute.Spec.Hostnames {
-			if hostnameMatching := getListenerHostnameMatchingHTTPRouteHostname(gateways, hostname); hostname != "" {
+			if hostnameMatching := getListenerHostnameMatchingHTTPRouteHostname(gateways, hostname); hostnameMatching != "" {
 				filteredHostnames = append(filteredHostnames, hostnameMatching)
 			}
 		}
