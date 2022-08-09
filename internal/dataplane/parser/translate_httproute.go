@@ -125,7 +125,8 @@ func generateKongRoutesFromHTTPRouteRule(httproute *gatewayv1alpha2.HTTPRoute, r
 	// Therefore we treat each match rule as a separate Kong Route, so we iterate through
 	// all matches to determine all the routes that will be needed for the services.
 	var routes []kongstate.Route
-	// TODO: comment
+
+	// generate request-transformer kong plugins from rule.filters
 	plugins := generatePluginsFromHTTPRouteRuleFilters(rule)
 	if len(rule.Matches) > 0 {
 		for matchNumber, match := range rule.Matches {
@@ -187,12 +188,14 @@ func generateKongRoutesFromHTTPRouteRule(httproute *gatewayv1alpha2.HTTPRoute, r
 				r.Route.Headers = headers
 			}
 
-			// TODO: we need this to make the conformance tests passing. Do we want a command line
-			// parameter or something similar to customize this field?
+			// stripPath needs to be enabled by default by the Gateway API conformance tests
 			r.StripPath = kong.Bool(false)
 
 			// attach the plugins to be applied to the given route
-			r.Plugins = plugins
+			if r.Plugins == nil {
+				r.Plugins = make([]kong.Plugin, 0)
+			}
+			r.Plugins = append(r.Plugins, plugins...)
 
 			// add the route to the list of routes for the service(s)
 			routes = append(routes, r)
@@ -227,27 +230,33 @@ func generateKongRoutesFromHTTPRouteRule(httproute *gatewayv1alpha2.HTTPRoute, r
 	return routes, nil
 }
 
-// TODO: comment
+// generatePluginsFromHTTPRouteRuleFilters accepts a rule as argument and converts
+// HttpRouteRule.Filters into Kong filters
 func generatePluginsFromHTTPRouteRuleFilters(rule gatewayv1alpha2.HTTPRouteRule) []kong.Plugin {
 	kongPlugins := make([]kong.Plugin, 0)
 	if rule.Filters == nil {
 		return kongPlugins
 	}
+
 	for _, filter := range rule.Filters {
 		if filter.Type == gatewayv1alpha2.HTTPRouteFilterRequestHeaderModifier {
 			kongPlugins = append(kongPlugins, generateRequestHeaderModifierKongPlugin(filter.RequestHeaderModifier))
 		}
-		// TODO: support all other filters
+		// TODO: https://github.com/Kong/kubernetes-ingress-controller/issues/2793
 	}
 
 	return kongPlugins
 }
 
+// generateRequestHeaderModifierKongPlugin converts a gatewayv1alpha2.HTTPRequestHeaderFilter into a
+// kong.Plugin of type request-transformer
 func generateRequestHeaderModifierKongPlugin(modifier *gatewayv1alpha2.HTTPRequestHeaderFilter) kong.Plugin {
 	plugin := kong.Plugin{
 		Name:   kong.String("request-transformer"),
 		Config: make(kong.Configuration),
 	}
+
+	// modifier.Set is converted to a pair composed of "replace" and "add"
 	if modifier.Set != nil {
 		setModifiers := make([]string, 0)
 		for _, s := range modifier.Set {
@@ -261,6 +270,7 @@ func generateRequestHeaderModifierKongPlugin(modifier *gatewayv1alpha2.HTTPReque
 		}
 	}
 
+	// modifier.Add is converted to "append"
 	if modifier.Add != nil {
 		appendModifiers := make([]string, 0)
 		for _, a := range modifier.Add {

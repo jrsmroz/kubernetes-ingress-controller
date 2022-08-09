@@ -20,7 +20,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 	"sigs.k8s.io/controller-runtime/pkg/source"
-	"sigs.k8s.io/gateway-api/apis/v1alpha2"
 	gatewayv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
 
 	"github.com/kong/kubernetes-ingress-controller/v2/internal/dataplane"
@@ -228,24 +227,6 @@ func (r *HTTPRouteReconciler) listHTTPRoutesForGateway(obj client.Object) []reco
 	}
 
 	return queue
-}
-
-func (r *HTTPRouteReconciler) listReferenceGrantsForHTTPRoute(obj client.Object) []reconcile.Request {
-	// map all HTTPRoute objects
-	httprouteList := gatewayv1alpha2.HTTPRouteList{}
-	if err := r.Client.List(context.Background(), &httprouteList); err != nil {
-		r.Log.Error(err, "failed to list httproute objects from the cached client")
-		return nil
-	}
-
-	return []reconcile.Request{
-		{
-			NamespacedName: types.NamespacedName{
-				Namespace: httprouteList.Items[0].Namespace,
-				Name:      httprouteList.Items[0].Name,
-			},
-		},
-	}
 }
 
 // -----------------------------------------------------------------------------
@@ -501,7 +482,7 @@ func (r *HTTPRouteReconciler) ensureGatewayReferenceStatusRemoved(ctx context.Co
 	return true, nil
 }
 
-// TODO: comment
+// TODO: comment.
 func (r *HTTPRouteReconciler) setRouteConditionResolvedRefsCondition(ctx context.Context, httpRoute *gatewayv1alpha2.HTTPRoute, parentStatuses map[string]*gatewayv1alpha2.RouteParentStatus) (map[string]*gatewayv1alpha2.RouteParentStatus, error) {
 	var reason gatewayv1alpha2.RouteConditionReason
 
@@ -516,7 +497,7 @@ outerLoop:
 
 			// Check if the BackendRef GroupKind is supported
 			if !util.IsBackendRefGroupKindSupported(backendRef.Group, backendRef.Kind) {
-				reason = v1alpha2.RouteReasonInvalidKind
+				reason = gatewayv1alpha2.RouteReasonInvalidKind
 				break outerLoop
 			}
 
@@ -528,7 +509,7 @@ outerLoop:
 				if !k8serrors.IsNotFound(err) {
 					return nil, err
 				}
-				reason = v1alpha2.RouteReasonBackendNotFound
+				reason = gatewayv1alpha2.RouteReasonBackendNotFound
 				break outerLoop
 			}
 
@@ -558,7 +539,7 @@ outerLoop:
 
 	for _, parentStatus := range parentStatuses {
 		parentStatus.Conditions = append(parentStatus.Conditions, metav1.Condition{
-			Type:               string(v1alpha2.RouteConditionResolvedRefs),
+			Type:               string(gatewayv1alpha2.RouteConditionResolvedRefs),
 			Status:             metav1.ConditionFalse,
 			ObservedGeneration: httpRoute.Generation,
 			LastTransitionTime: metav1.Now(),

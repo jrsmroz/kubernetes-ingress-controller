@@ -106,14 +106,15 @@ func GetPodDetails(ctx context.Context, kubeClient clientset.Interface) (*PodInf
 	}, nil
 }
 
-var (
-	backendRefSupportedGroupKinds = map[string]interface{}{
-		"core/Service": nil,
-	}
-)
+// map of all the supported Group/Kinds for the backend. At the moment, only
+// core services are supported, but to provide support to other kinds, it is
+// enough to add entries to this map
+var backendRefSupportedGroupKinds = map[string]interface{}{
+	"core/Service": nil,
+}
 
 // IsBackendRefGroupKindSupported checks if the GroupKind of the obect used as
-// BackendRef for the HTTPRoute is supported
+// BackendRef for the HTTPRoute is supported.
 func IsBackendRefGroupKindSupported(gatewayAPIGroup *gatewayv1alpha2.Group, gatewayAPIKind *gatewayv1alpha2.Kind) bool {
 	group := "core"
 	if gatewayAPIGroup != nil && *gatewayAPIGroup != "" {

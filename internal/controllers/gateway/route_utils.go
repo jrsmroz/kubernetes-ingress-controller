@@ -5,13 +5,13 @@ import (
 	"fmt"
 	"reflect"
 
-	"github.com/kong/kubernetes-ingress-controller/v2/internal/util"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/gateway-api/apis/v1alpha2"
 	gatewayv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
+
+	"github.com/kong/kubernetes-ingress-controller/v2/internal/util"
 )
 
 // -----------------------------------------------------------------------------
@@ -111,9 +111,9 @@ func getSupportedGatewayForRoute(ctx context.Context, mgrc client.Client, obj cl
 				// based on matching a filter for a UDP listener). This needs to be expanded to an allowedRoutes.kind
 				// implementation with default allowed kinds when there's no user-specified filter.
 				var oneMatch bool
-				switch obj.(type) {
+				switch obj := obj.(type) {
 				case *gatewayv1alpha2.HTTPRoute:
-					hostnames := obj.(*gatewayv1alpha2.HTTPRoute).Spec.Hostnames
+					hostnames := obj.Spec.Hostnames
 					oneMatch = listenerHostnameIntersectWithRouteHostnames(listener, hostnames)
 					if !(listener.Protocol == gatewayv1alpha2.HTTPProtocolType || listener.Protocol == gatewayv1alpha2.HTTPSProtocolType) {
 						continue
@@ -127,7 +127,7 @@ func getSupportedGatewayForRoute(ctx context.Context, mgrc client.Client, obj cl
 						continue
 					}
 				case *gatewayv1alpha2.TLSRoute:
-					hostnames := obj.(*gatewayv1alpha2.TLSRoute).Spec.Hostnames
+					hostnames := obj.Spec.Hostnames
 					oneMatch = listenerHostnameIntersectWithRouteHostnames(listener, hostnames)
 					if listener.Protocol != gatewayv1alpha2.TLSProtocolType {
 						continue
@@ -169,7 +169,7 @@ func getSupportedGatewayForRoute(ctx context.Context, mgrc client.Client, obj cl
 			if !filtered || allowedNamespace {
 				reason := gatewayv1alpha2.RouteReasonAccepted
 				if matchingHostname == metav1.ConditionFalse {
-					reason = v1alpha2.RouteReasonNoMatchingListenerHostname
+					reason = gatewayv1alpha2.RouteReasonNoMatchingListenerHostname
 				}
 				var listenerName string
 				if parentRef.SectionName != nil && *parentRef.SectionName != "" {
@@ -179,7 +179,7 @@ func getSupportedGatewayForRoute(ctx context.Context, mgrc client.Client, obj cl
 					gateway:      &gateway,
 					listenerName: listenerName,
 					condition: metav1.Condition{
-						Type:   string(v1alpha2.RouteConditionAccepted),
+						Type:   string(gatewayv1alpha2.RouteConditionAccepted),
 						Status: matchingHostname,
 						Reason: string(reason),
 					},
@@ -261,7 +261,7 @@ func filterHostnames(gateways []supportedGatewayWithCondition, httpRoute *gatewa
 
 func isRouteAccepted(gateways []supportedGatewayWithCondition) bool {
 	for _, gateway := range gateways {
-		if gateway.condition.Type == string(v1alpha2.RouteConditionAccepted) && gateway.condition.Status == metav1.ConditionTrue {
+		if gateway.condition.Type == string(gatewayv1alpha2.RouteConditionAccepted) && gateway.condition.Status == metav1.ConditionTrue {
 			return true
 		}
 	}

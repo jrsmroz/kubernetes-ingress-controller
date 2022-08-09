@@ -2,12 +2,12 @@ package util
 
 import "strings"
 
-// TODO: comment exported function
+// TODO: comment exported function.
 func HostnamesIntersect(hostnameA, hostnameB string) bool {
 	return HostnamesMatch(hostnameA, hostnameB) || HostnamesMatch(hostnameB, hostnameA)
 }
 
-// TODO: comment exported function and code sections
+// TODO: comment exported function and code sections.
 func HostnamesMatch(listenerHostname, routeHostname string) bool {
 	// the hostnames are in the form of "foo.bar.com"; split them
 	// in a slice of substrings
@@ -24,7 +24,7 @@ func HostnamesMatch(listenerHostname, routeHostname string) bool {
 		// if the current part of B is a wildcard, we need to find the first
 		// A part that matches with the following B part
 		if wildcard {
-			for ; b < len(routeHostnameLabels); b += 1 {
+			for ; b < len(routeHostnameLabels); b++ {
 				if listenerHostnameLabels[a] == routeHostnameLabels[b] {
 					matchFound = true
 					break
@@ -49,9 +49,5 @@ func HostnamesMatch(listenerHostname, routeHostname string) bool {
 			return false
 		}
 	}
-	if len(routeHostnameLabels)-b != len(listenerHostnameLabels)-a {
-		return false
-	}
-
-	return true
+	return len(routeHostnameLabels)-b != len(listenerHostnameLabels)-a
 }

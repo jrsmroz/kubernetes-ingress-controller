@@ -150,12 +150,15 @@ func (p *Parser) generateKongServiceFromBackendRef(
 			// these, we do not want a single impermissible ref to take the entire rule offline. in the case of edits,
 			// failing the entire rule could potentially delete routes that were previously online and in use, and
 			// that remain viable (because they still have some permissible backendRefs)
-			namespace := route.GetNamespace()
+			var namespace, kind string = route.GetNamespace(), ""
 			if backendRef.Namespace != nil {
 				namespace = string(*backendRef.Namespace)
 			}
+			if backendRef.Kind != nil {
+				kind = string(*backendRef.Kind)
+			}
 			p.logger.Errorf("%s requested backendRef to %s %s/%s, but no ReferencePolicy permits it, skipping...",
-				objName, *backendRef.Kind, namespace, backendRef.Name)
+				objName, kind, namespace, backendRef.Name)
 		}
 	}
 
@@ -186,6 +189,10 @@ func (p *Parser) generateKongServiceFromBackendRef(
 		}
 	}
 
+	// In the context of the gateway API conformance tests, if there is no service for the backend,
+	// the response must have a status code of 500. Since The default behavior of Kong is returning 503
+	// if there is no backend for a service, we inject a plugin that terminates all requests with 500
+	// as status code
 	if len(service.Backends) == 0 {
 		if service.Plugins == nil {
 			service.Plugins = make([]kong.Plugin, 0)
