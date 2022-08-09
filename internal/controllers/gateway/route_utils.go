@@ -234,7 +234,7 @@ func filterHostnames(gateways []supportedGatewayWithCondition, httpRoute *gatewa
 		}
 	} else {
 		for _, hostname := range httpRoute.Spec.Hostnames {
-			if hostnameMatching := getListenerHostnameMatchingHTTPRouteHostname(gateways, hostname); hostnameMatching != "" {
+			if hostnameMatching := getMinimumHostnameIntersection(gateways, hostname); hostnameMatching != "" {
 				filteredHostnames = append(filteredHostnames, hostnameMatching)
 			}
 		}
@@ -244,7 +244,14 @@ func filterHostnames(gateways []supportedGatewayWithCondition, httpRoute *gatewa
 	return httpRoute
 }
 
-func getListenerHostnameMatchingHTTPRouteHostname(gateways []supportedGatewayWithCondition, hostname gatewayv1alpha2.Hostname) gatewayv1alpha2.Hostname {
+// getMinimumHostnameIntersection returns the minimum intersecting namespace, in the sense that:
+//
+// - if the listener hostname is empty, returns the httpRoute hostname
+// - if the listener hostname acts as a wildcard for the httpRoute hostname, return the httpRoute hostname
+// - if the httpRoute hostname acts as a wildcard for the listener hostname, return the listener hostname
+// - if the httpRoute hostname is the same of the listener hostname, returns it
+// - if none of the above is true, return an empty string
+func getMinimumHostnameIntersection(gateways []supportedGatewayWithCondition, hostname gatewayv1alpha2.Hostname) gatewayv1alpha2.Hostname {
 	for _, gateway := range gateways {
 		for _, listener := range gateway.gateway.Spec.Listeners {
 			// if the listenerName is specified and matches the name of the gateway listener proceed
@@ -274,7 +281,8 @@ func isRouteAccepted(gateways []supportedGatewayWithCondition) bool {
 	return false
 }
 
-func isHTTPReferenceGranted(froms []gatewayv1alpha2.ReferenceGrantFrom, tos []gatewayv1alpha2.ReferenceGrantTo, backendRef gatewayv1alpha2.HTTPBackendRef, fromNamespace string) bool {
+// isHTTPReferenceGranted checks that the backendRef referenced by the HTTPRoute is granted by the a specific ReferenceGrant
+func isHTTPReferenceGranted(grantSpec gatewayv1alpha2.ReferenceGrantSpec, backendRef gatewayv1alpha2.HTTPBackendRef, fromNamespace string) bool {
 	var backendRefGroup gatewayv1alpha2.Group
 	var backendRefKind gatewayv1alpha2.Kind
 
@@ -284,12 +292,12 @@ func isHTTPReferenceGranted(froms []gatewayv1alpha2.ReferenceGrantFrom, tos []ga
 	if backendRef.Kind != nil {
 		backendRefKind = *backendRef.Kind
 	}
-	for _, from := range froms {
+	for _, from := range grantSpec.From {
 		if from.Group != gatewayv1alpha2.GroupName || from.Kind != "HTTPRoute" || fromNamespace != string(from.Namespace) {
 			continue
 		}
 
-		for _, to := range tos {
+		for _, to := range grantSpec.To {
 			if backendRefGroup == to.Group &&
 				backendRefKind == to.Kind &&
 				(to.Name == nil || *to.Name == backendRef.Name) {

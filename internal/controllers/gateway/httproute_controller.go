@@ -79,13 +79,6 @@ func (r *HTTPRouteReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		return err
 	}
 
-	if err := c.Watch(
-		&source.Kind{Type: &gatewayv1alpha2.ReferenceGrant{}},
-		handler.EnqueueRequestsFromMapFunc(r.listHTTPRoutesForGateway),
-	); err != nil {
-		return err
-	}
-
 	// because of the additional burden of having to manage reference data-plane
 	// configurations for HTTPRoute objects in the underlying Kong Gateway, we
 	// simply reconcile ALL HTTPRoute objects. This allows us to drop the backend
@@ -315,6 +308,7 @@ func (r *HTTPRouteReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 		}
 	}
 
+	// perform operations on the kong store only if the route is in accepted status
 	if isRouteAccepted(gateways) {
 		// remove all the hostnames that don't match with at least one Listener's Hostname
 		filteredHTTPRoute := filterHostnames(gateways, httproute.DeepCopy())
@@ -482,56 +476,11 @@ func (r *HTTPRouteReconciler) ensureGatewayReferenceStatusRemoved(ctx context.Co
 	return true, nil
 }
 
-// TODO: comment.
+// setRouteConditionResolvedRefsCondition sets a condition of type ResolvedRefs on the route status
 func (r *HTTPRouteReconciler) setRouteConditionResolvedRefsCondition(ctx context.Context, httpRoute *gatewayv1alpha2.HTTPRoute, parentStatuses map[string]*gatewayv1alpha2.RouteParentStatus) (map[string]*gatewayv1alpha2.RouteParentStatus, error) {
-	var reason gatewayv1alpha2.RouteConditionReason
-
-	// v1alpha2.RouteConditionResolvedRefs condition
-outerLoop:
-	for _, rule := range httpRoute.Spec.Rules {
-		for _, backendRef := range rule.BackendRefs {
-			backendNamespace := httpRoute.Namespace
-			if backendRef.Namespace != nil && *backendRef.Namespace != "" {
-				backendNamespace = string(*backendRef.Namespace)
-			}
-
-			// Check if the BackendRef GroupKind is supported
-			if !util.IsBackendRefGroupKindSupported(backendRef.Group, backendRef.Kind) {
-				reason = gatewayv1alpha2.RouteReasonInvalidKind
-				break outerLoop
-			}
-
-			// Check if all the objects referenced actually exist
-			// Only services are currently supported as BackendRef objects
-			service := &corev1.Service{}
-			err := r.Client.Get(ctx, types.NamespacedName{Namespace: backendNamespace, Name: string(backendRef.Name)}, service)
-			if err != nil {
-				if !k8serrors.IsNotFound(err) {
-					return nil, err
-				}
-				reason = gatewayv1alpha2.RouteReasonBackendNotFound
-				break outerLoop
-			}
-
-			// Check if the object referenced is in another namespace,
-			// and if there is grant for that reference
-			if httpRoute.Namespace != backendNamespace {
-				referenceGrantList := &gatewayv1alpha2.ReferenceGrantList{}
-				if err := r.Client.List(ctx, referenceGrantList, client.InNamespace(backendNamespace)); err != nil {
-					return nil, err
-				}
-				if len(referenceGrantList.Items) == 0 {
-					reason = gatewayv1alpha2.RouteReasonRefNotPermitted
-					break outerLoop
-				}
-				for _, grant := range referenceGrantList.Items {
-					if !isHTTPReferenceGranted(grant.Spec.From, grant.Spec.To, backendRef, httpRoute.Namespace) {
-						reason = gatewayv1alpha2.RouteReasonRefNotPermitted
-						break outerLoop
-					}
-				}
-			}
-		}
+	reason, err := r.getHTTPRouteRuleReason(ctx, *httpRoute)
+	if err != nil {
+		return nil, err
 	}
 	if reason == "" {
 		return parentStatuses, nil
@@ -548,4 +497,49 @@ outerLoop:
 	}
 
 	return parentStatuses, nil
+}
+
+func (r *HTTPRouteReconciler) getHTTPRouteRuleReason(ctx context.Context, httpRoute gatewayv1alpha2.HTTPRoute) (gatewayv1alpha2.RouteConditionReason, error) {
+	for _, rule := range httpRoute.Spec.Rules {
+		for _, backendRef := range rule.BackendRefs {
+			backendNamespace := httpRoute.Namespace
+			if backendRef.Namespace != nil && *backendRef.Namespace != "" {
+				backendNamespace = string(*backendRef.Namespace)
+			}
+
+			// Check if the BackendRef GroupKind is supported
+			if !util.IsBackendRefGroupKindSupported(backendRef.Group, backendRef.Kind) {
+				return gatewayv1alpha2.RouteReasonInvalidKind, nil
+			}
+
+			// Check if all the objects referenced actually exist
+			// Only services are currently supported as BackendRef objects
+			service := &corev1.Service{}
+			err := r.Client.Get(ctx, types.NamespacedName{Namespace: backendNamespace, Name: string(backendRef.Name)}, service)
+			if err != nil {
+				if !k8serrors.IsNotFound(err) {
+					return "", err
+				}
+				return gatewayv1alpha2.RouteReasonBackendNotFound, nil
+			}
+
+			// Check if the object referenced is in another namespace,
+			// and if there is grant for that reference
+			if httpRoute.Namespace != backendNamespace {
+				referenceGrantList := &gatewayv1alpha2.ReferenceGrantList{}
+				if err := r.Client.List(ctx, referenceGrantList, client.InNamespace(backendNamespace)); err != nil {
+					return "", err
+				}
+				if len(referenceGrantList.Items) == 0 {
+					return gatewayv1alpha2.RouteReasonRefNotPermitted, nil
+				}
+				for _, grant := range referenceGrantList.Items {
+					if !isHTTPReferenceGranted(grant.Spec, backendRef, httpRoute.Namespace) {
+						return gatewayv1alpha2.RouteReasonRefNotPermitted, nil
+					}
+				}
+			}
+		}
+	}
+	return "", nil
 }
