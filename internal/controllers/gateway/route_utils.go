@@ -22,6 +22,8 @@ const (
 	unsupportedGW = "no supported Gateway found for route"
 )
 
+// supportedGatewayWithCondition is a struct that wraps a gateway and some further info
+// such as the condition Status condition Accepted of the gateway and the listenerName
 type supportedGatewayWithCondition struct {
 	gateway      *gatewayv1alpha2.Gateway
 	condition    metav1.Condition
@@ -110,11 +112,11 @@ func getSupportedGatewayForRoute(ctx context.Context, mgrc client.Client, obj cl
 				// criteria on a listener that cannot possibly handle them (e.g. an HTTPRoute should not be included
 				// based on matching a filter for a UDP listener). This needs to be expanded to an allowedRoutes.kind
 				// implementation with default allowed kinds when there's no user-specified filter.
-				var oneMatch bool
+				var oneHostnameMatch bool
 				switch obj := obj.(type) {
 				case *gatewayv1alpha2.HTTPRoute:
 					hostnames := obj.Spec.Hostnames
-					oneMatch = listenerHostnameIntersectWithRouteHostnames(listener, hostnames)
+					oneHostnameMatch = listenerHostnameIntersectWithRouteHostnames(listener, hostnames)
 					if !(listener.Protocol == gatewayv1alpha2.HTTPProtocolType || listener.Protocol == gatewayv1alpha2.HTTPSProtocolType) {
 						continue
 					}
@@ -128,14 +130,14 @@ func getSupportedGatewayForRoute(ctx context.Context, mgrc client.Client, obj cl
 					}
 				case *gatewayv1alpha2.TLSRoute:
 					hostnames := obj.Spec.Hostnames
-					oneMatch = listenerHostnameIntersectWithRouteHostnames(listener, hostnames)
+					oneHostnameMatch = listenerHostnameIntersectWithRouteHostnames(listener, hostnames)
 					if listener.Protocol != gatewayv1alpha2.TLSProtocolType {
 						continue
 					}
 				default:
 					continue
 				}
-				if oneMatch {
+				if oneHostnameMatch {
 					matchingHostname = metav1.ConditionTrue
 				}
 				if listener.AllowedRoutes != nil {
@@ -167,6 +169,8 @@ func getSupportedGatewayForRoute(ctx context.Context, mgrc client.Client, obj cl
 
 			_, allowedNamespace := allowedNamespaces[obj.GetNamespace()]
 			if !filtered || allowedNamespace {
+				// if there is no matchingHostname, the gateway Status Condition Accepted must be set to False
+				// with reason NoMatchingListenerHostname
 				reason := gatewayv1alpha2.RouteReasonAccepted
 				if matchingHostname == metav1.ConditionFalse {
 					reason = gatewayv1alpha2.RouteReasonNoMatchingListenerHostname
@@ -198,16 +202,17 @@ func getSupportedGatewayForRoute(ctx context.Context, mgrc client.Client, obj cl
 }
 
 func listenerHostnameIntersectWithRouteHostnames(listener gatewayv1alpha2.Listener, hostnames []gatewayv1alpha2.Hostname) bool {
+	// if the listener has no hostname, all hostnames automatically intersect
 	if listener.Hostname == nil || *listener.Hostname == "" || len(hostnames) == 0 {
 		return true
 	}
 
+	// iterate over all the hostnames and check that at least one intersect with the listener hostname
 	for _, hostname := range hostnames {
 		if util.HostnamesIntersect(string(*listener.Hostname), string(hostname)) {
 			return true
 		}
 	}
-
 	return false
 }
 
@@ -229,34 +234,35 @@ func filterHostnames(gateways []supportedGatewayWithCondition, httpRoute *gatewa
 		}
 	} else {
 		for _, hostname := range httpRoute.Spec.Hostnames {
-		gatewayLoop:
-			for _, gateway := range gateways {
-				for _, listener := range gateway.gateway.Spec.Listeners {
-					// if the listenerName is specified and matches the name of the gateway listener proceed
-					if gatewayv1alpha2.SectionName(gateway.listenerName) == "" ||
-						gatewayv1alpha2.SectionName(gateway.listenerName) == listener.Name {
-
-						if listener.Hostname == nil || *listener.Hostname == "" {
-							filteredHostnames = append(filteredHostnames, hostname)
-							break
-						}
-
-						if util.HostnamesMatch(string(*listener.Hostname), string(hostname)) {
-							filteredHostnames = append(filteredHostnames, hostname)
-							break gatewayLoop
-						}
-						if util.HostnamesMatch(string(hostname), string(*listener.Hostname)) {
-							filteredHostnames = append(filteredHostnames, *listener.Hostname)
-							break gatewayLoop
-						}
-					}
-				}
+			if hostnameMatching := getListenerHostnameMatchingHTTPRouteHostname(gateways, hostname); hostname != "" {
+				filteredHostnames = append(filteredHostnames, hostnameMatching)
 			}
 		}
 	}
 
 	httpRoute.Spec.Hostnames = filteredHostnames
 	return httpRoute
+}
+
+func getListenerHostnameMatchingHTTPRouteHostname(gateways []supportedGatewayWithCondition, hostname gatewayv1alpha2.Hostname) gatewayv1alpha2.Hostname {
+	for _, gateway := range gateways {
+		for _, listener := range gateway.gateway.Spec.Listeners {
+			// if the listenerName is specified and matches the name of the gateway listener proceed
+			if gatewayv1alpha2.SectionName(gateway.listenerName) == "" ||
+				gatewayv1alpha2.SectionName(gateway.listenerName) == listener.Name {
+				if listener.Hostname == nil || *listener.Hostname == "" {
+					return hostname
+				}
+				if util.HostnamesMatch(string(*listener.Hostname), string(hostname)) {
+					return hostname
+				}
+				if util.HostnamesMatch(string(hostname), string(*listener.Hostname)) {
+					return *listener.Hostname
+				}
+			}
+		}
+	}
+	return ""
 }
 
 func isRouteAccepted(gateways []supportedGatewayWithCondition) bool {

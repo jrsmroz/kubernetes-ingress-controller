@@ -316,7 +316,7 @@ func (r *HTTPRouteReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 	}
 
 	if isRouteAccepted(gateways) {
-		// TODO: comment
+		// remove all the hostnames that don't match with at least one Listener's Hostname
 		filteredHTTPRoute := filterHostnames(gateways, httproute.DeepCopy())
 
 		// if the gateways are ready, and the HTTPRoute is destined for them, ensure that

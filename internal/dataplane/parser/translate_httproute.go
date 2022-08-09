@@ -126,7 +126,7 @@ func generateKongRoutesFromHTTPRouteRule(httproute *gatewayv1alpha2.HTTPRoute, r
 	// all matches to determine all the routes that will be needed for the services.
 	var routes []kongstate.Route
 
-	// generate request-transformer kong plugins from rule.filters
+	// generate kong plugins from rule.filters
 	plugins := generatePluginsFromHTTPRouteRuleFilters(rule)
 	if len(rule.Matches) > 0 {
 		for matchNumber, match := range rule.Matches {
@@ -140,7 +140,7 @@ func generateKongRoutesFromHTTPRouteRule(httproute *gatewayv1alpha2.HTTPRoute, r
 				matchNumber,
 			))
 
-			// TODO: implement query param matches
+			// TODO: implement query param matches (https://github.com/Kong/kubernetes-ingress-controller/issues/2778)
 			if len(match.QueryParams) > 0 {
 				return nil, fmt.Errorf("query param matches are not yet supported")
 			}
